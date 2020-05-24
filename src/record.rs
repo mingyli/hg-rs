@@ -11,7 +11,8 @@ pub struct Record {
     pub link_revision: u32,
     pub parent1_revision: u32,
     pub parent2_revision: u32,
-    pub hash: [u8; 32],
+    pub hash: [u8; 20],
+    pub padding: [u8; 12],
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]

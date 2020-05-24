@@ -1,10 +1,10 @@
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
 use anyhow::Result;
 
 use crate::repository::Repository;
-use crate::revlog::RevLog;
 
 // Initialize a repository.
 pub fn init() -> Result<()> {
@@ -14,19 +14,18 @@ pub fn init() -> Result<()> {
 }
 
 // Dump the contents of an index file.
-pub fn debug_index() -> Result<()> {
-    let repo = Repository::new(".");
-    let mut revlog = RevLog::new(repo.file_path("hello.txt"))?;
+pub fn debug_index<P: AsRef<Path>>(path: P) -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut revlog = repo.revlog(path)?;
     revlog.debug_index()?;
     Ok(())
 }
 
 // Append contents of file into revlog.
-pub fn snap() -> Result<()> {
-    let repo = Repository::new(".");
-    let path = repo.file_path("hello.txt");
-    let mut revlog = RevLog::new(&path)?;
-    let mut file = File::open(&path)?;
+pub fn snap<P: AsRef<Path>>(path: P) -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut revlog = repo.revlog(&path)?;
+    let mut file = File::open(path)?;
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)?;
     revlog.add_revision(&buffer)?;
@@ -34,22 +33,20 @@ pub fn snap() -> Result<()> {
 }
 
 // Display contents of a revision.
-pub fn debugdata(rev: u64) -> Result<()> {
-    let repo = Repository::new(".");
-    let path = repo.file_path("hello.txt");
-    let mut revlog = RevLog::new(&path)?;
+pub fn debugdata<P: AsRef<Path>>(path: P, rev: u32) -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut revlog = repo.revlog(&path)?;
     let hunk = revlog.get_hunk(rev)?;
-    println!("{}", String::from_utf8(hunk)?);
+    print!("{}", String::from_utf8(hunk)?);
     Ok(())
 }
 
 // Replace contents of file.
-pub fn checkout(rev: u64) -> Result<()> {
-    let repo = Repository::new(".");
-    let path = repo.file_path("hello.txt");
-    let mut revlog = RevLog::new(&path)?;
-    let hunk = revlog.get_hunk(rev)?;
-    let mut file = OpenOptions::new().write(true).truncate(true).open(&path)?;
-    file.write_all(&hunk)?;
-    Ok(())
-}
+// pub fn checkout(rev: u64) -> Result<()> {
+//     let repo = Repository::from_cwd()?;
+//     let mut revlog = repo.revlog(&path)?;
+//     let hunk = revlog.get_hunk(rev)?;
+//     let mut file = OpenOptions::new().write(true).truncate(true).open(&path)?;
+//     file.write_all(&hunk)?;
+//     Ok(())
+// }
