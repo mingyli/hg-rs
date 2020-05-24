@@ -6,9 +6,7 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use sha1::{Digest, Sha1};
 
-use crate::record::{Record, RECORD_SIZE};
-
-const NULLID_REVISION: u32 = u32::MAX;
+use crate::record::{Record, NULLID_REVISION, RECORD_SIZE};
 
 pub struct RevLog {
     index: File,
@@ -77,8 +75,8 @@ impl RevLog {
                 hunk_length: bytes.len() as u32,
                 base_revision: new_rev as u32,
                 hash: nodeid.try_into()?,
-                parent1_revision: NULLID_REVISION,
-                parent2_revision: NULLID_REVISION,
+                parent1_revision: None,
+                parent2_revision: None,
                 ..Record::default()
             }
         } else {
@@ -95,8 +93,8 @@ impl RevLog {
                 base_revision: new_rev as u32,
                 hunk_offset: latest_record.hunk_offset + latest_record.hunk_length as u64,
                 hash: nodeid.try_into()?,
-                parent1_revision: new_rev as u32 - 1,
-                parent2_revision: NULLID_REVISION,
+                parent1_revision: Some(new_rev as u32 - 1),
+                parent2_revision: None,
                 ..Record::default()
             }
         };
@@ -137,8 +135,14 @@ impl RevLog {
                 record.hunk_length,
                 record.base_revision,
                 hex::encode(record.hash),
-                hex::encode(self.get_record(record.parent1_revision)?.hash),
-                hex::encode(self.get_record(record.parent2_revision)?.hash),
+                hex::encode(
+                    self.get_record(record.parent1_revision.unwrap_or(NULLID_REVISION))?
+                        .hash
+                ),
+                hex::encode(
+                    self.get_record(record.parent2_revision.unwrap_or(NULLID_REVISION))?
+                        .hash
+                )
             );
         }
         Ok(())
@@ -163,8 +167,8 @@ mod tests {
         let expected0 = Record {
             hunk_length: b"hello my bytes".len() as u32,
             base_revision: 0,
-            parent1_revision: NULLID_REVISION,
-            parent2_revision: NULLID_REVISION,
+            parent1_revision: None,
+            parent2_revision: None,
             hash: {
                 let mut hasher = Sha1::new();
                 hasher.input([0u8; 20]);
@@ -179,8 +183,8 @@ mod tests {
             hunk_length: b"hello my other bytes".len() as u32,
             hunk_offset: b"hello my bytes".len() as u64,
             base_revision: 1,
-            parent1_revision: 0,
-            parent2_revision: NULLID_REVISION,
+            parent1_revision: Some(0),
+            parent2_revision: None,
             hash: {
                 let mut hasher = Sha1::new();
                 hasher.input([0u8; 20]);
