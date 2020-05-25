@@ -14,25 +14,7 @@ pub struct RevLog {
 }
 
 impl RevLog {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<RevLog> {
-        let index_path = path.as_ref().with_file_name(format!(
-            "{}{}",
-            path.as_ref()
-                .file_name()
-                .context("f")?
-                .to_str()
-                .context("F")?,
-            ".i"
-        ));
-        let data_path = path.as_ref().with_file_name(format!(
-            "{}{}",
-            path.as_ref()
-                .file_name()
-                .context("f")?
-                .to_str()
-                .context("f")?,
-            ".d"
-        ));
+    pub fn new<P: AsRef<Path>>(index_path: P, data_path: P) -> Result<RevLog> {
         Ok(RevLog {
             index: OpenOptions::new()
                 .read(true)
@@ -45,6 +27,28 @@ impl RevLog {
                 .create(true)
                 .open(data_path)?,
         })
+    }
+
+    pub fn for_file<P: AsRef<Path>>(path: P) -> Result<RevLog> {
+        let index_path = path.as_ref().with_file_name(format!(
+            "{}{}",
+            path.as_ref()
+                .file_name()
+                .context("Failed to get file name.")?
+                .to_str()
+                .context("Failed to get Unicode string.")?,
+            ".i"
+        ));
+        let data_path = path.as_ref().with_file_name(format!(
+            "{}{}",
+            path.as_ref()
+                .file_name()
+                .context("Failed to get file name.")?
+                .to_str()
+                .context("Failed to get Unicode string.")?,
+            ".d"
+        ));
+        RevLog::new(index_path, data_path)
     }
 
     // Number of revisions
@@ -61,7 +65,8 @@ impl RevLog {
         }
     }
 
-    pub fn add_revision(&mut self, bytes: &[u8]) -> Result<()> {
+    // Append a revision to the revlog and return the newly created Record.
+    pub fn add_revision(&mut self, bytes: &[u8]) -> Result<Record> {
         let new_rev = self.size()?;
         let record = if new_rev == 0 {
             let nodeid = {
@@ -100,7 +105,7 @@ impl RevLog {
         };
         self.index.write_all(&bincode::serialize(&record)?)?;
         self.data.write_all(bytes)?;
-        Ok(())
+        Ok(record)
     }
 
     pub fn get_record(&mut self, rev: u32) -> Result<Record> {
@@ -122,6 +127,14 @@ impl RevLog {
         self.data.seek(SeekFrom::Start(record.hunk_offset))?;
         self.data.read_exact(&mut buffer)?;
         Ok(buffer)
+    }
+
+    pub fn get_last_hunk(&mut self) -> Result<Vec<u8>> {
+        if self.size()? == 0 {
+            Err(anyhow!("The size of the revlog is 0."))
+        } else {
+            self.get_hunk(self.size()? - 1)
+        }
     }
 
     pub fn debug_index(&mut self) -> Result<()> {
@@ -157,7 +170,7 @@ mod tests {
     #[test]
     fn test_revlog() -> Result<()> {
         let base_dir = tempfile::tempdir()?;
-        let mut revlog = RevLog::new(base_dir.path().join("hello"))?;
+        let mut revlog = RevLog::for_file(base_dir.path().join("hello"))?;
         assert_eq!(revlog.size()?, 0);
         revlog.add_revision(b"hello my bytes")?;
         assert_eq!(revlog.size()?, 1);

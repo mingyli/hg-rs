@@ -4,6 +4,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
+use crate::manifest::Manifest;
 use crate::repository::Repository;
 
 // Initialize a repository.
@@ -21,23 +22,48 @@ pub fn debug_index<P: AsRef<Path>>(path: P) -> Result<()> {
     Ok(())
 }
 
+// Dump the contents of the manifest's index file.
+pub fn debug_manifest_index() -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut revlog = repo.manifest_revlog()?;
+    revlog.debug_index()?;
+    Ok(())
+}
+
 // Append contents of file into revlog.
-pub fn snap<P: AsRef<Path>>(path: P) -> Result<()> {
+pub fn snapshot<P: AsRef<Path>>(path: P) -> Result<()> {
     let repo = Repository::from_cwd()?;
     let mut revlog = repo.revlog(&path)?;
-    let mut file = File::open(path)?;
+    let mut file = File::open(&path)?;
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)?;
-    revlog.add_revision(&buffer)?;
+    let record = revlog.add_revision(&buffer)?;
+
+    let mut manifest_revlog = repo.manifest_revlog()?;
+    let mut manifest: Manifest = match manifest_revlog.get_last_hunk() {
+        Ok(hunk) => bincode::deserialize(&hunk)?,
+        Err(_) => Manifest::default(),
+    };
+    manifest.entries.insert(path.as_ref().into(), record.hash);
+    manifest_revlog.add_revision(&bincode::serialize(&manifest)?)?;
     Ok(())
 }
 
 // Display contents of a revision.
-pub fn debugdata<P: AsRef<Path>>(path: P, rev: u32) -> Result<()> {
+pub fn debug_data<P: AsRef<Path>>(path: P, rev: u32) -> Result<()> {
     let repo = Repository::from_cwd()?;
     let mut revlog = repo.revlog(&path)?;
     let hunk = revlog.get_hunk(rev)?;
     print!("{}", String::from_utf8(hunk)?);
+    Ok(())
+}
+
+pub fn debug_manifest_data(rev: u32) -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut manifest_revlog = repo.manifest_revlog()?;
+    let hunk = manifest_revlog.get_hunk(rev)?;
+    let manifest: Manifest = bincode::deserialize(&hunk)?;
+    print!("{}", manifest);
     Ok(())
 }
 

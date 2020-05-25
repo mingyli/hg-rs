@@ -46,7 +46,14 @@ impl Repository {
     }
 
     pub fn revlog<P: AsRef<Path>>(&self, path: P) -> Result<RevLog> {
-        RevLog::new(self.hg_dir.join("store").join("data").join(path))
+        RevLog::for_file(self.hg_dir.join("store").join("data").join(path))
+    }
+
+    pub fn manifest_revlog(&self) -> Result<RevLog> {
+        RevLog::new(
+            self.hg_dir.join("store").join("00manifest.i"),
+            self.hg_dir.join("store").join("00manifest.d"),
+        )
     }
 }
 
