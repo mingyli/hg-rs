@@ -45,8 +45,8 @@ where
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum Hunk {
-    Full(Vec<u8>),
-    Delta,
+    Snapshot(Vec<u8>),
+    Delta(Vec<u8>),
 }
 
 #[cfg(test)]

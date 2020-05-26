@@ -55,6 +55,13 @@ impl Repository {
             self.hg_dir.join("store").join("00manifest.d"),
         )
     }
+
+    pub fn changelog_revlog(&self) -> Result<RevLog> {
+        RevLog::new(
+            self.hg_dir.join("store").join("00changelog.i"),
+            self.hg_dir.join("store").join("00changelog.d"),
+        )
+    }
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
+use crate::changeset::Changeset;
 use crate::manifest::Manifest;
 use crate::repository::Repository;
 
@@ -19,6 +20,13 @@ pub fn debug_index<P: AsRef<Path>>(path: P) -> Result<()> {
     let repo = Repository::from_cwd()?;
     let mut revlog = repo.revlog(path)?;
     revlog.debug_index()?;
+    Ok(())
+}
+
+pub fn debug_changelog_index() -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut changelog = repo.changelog_revlog()?;
+    changelog.debug_index()?;
     Ok(())
 }
 
@@ -64,6 +72,50 @@ pub fn debug_manifest_data(rev: u32) -> Result<()> {
     let hunk = manifest_revlog.get_hunk(rev)?;
     let manifest: Manifest = bincode::deserialize(&hunk)?;
     print!("{}", manifest);
+    Ok(())
+}
+
+pub fn debug_changelog_data(rev: u32) -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut changelog = repo.changelog_revlog()?;
+    let hunk = changelog.get_hunk(rev)?;
+    let changeset: Changeset = bincode::deserialize(&hunk)?;
+    print!("{}", changeset);
+    Ok(())
+}
+
+pub fn commit(message: &str) -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut changelog = repo.changelog_revlog()?;
+    let mut changeset: Changeset = match changelog.get_last_hunk() {
+        Ok(hunk) => bincode::deserialize(&hunk)?,
+        Err(_) => Changeset::default(),
+    };
+
+    let mut manifest_revlog = repo.manifest_revlog()?;
+    let mut manifest: Manifest = match manifest_revlog.get_last_hunk() {
+        Ok(hunk) => bincode::deserialize(&hunk)?,
+        Err(_) => Manifest::default(),
+    };
+
+    // TODO: Use paths in dirstate?.
+    for path in &["hello.txt", "README.md"] {
+        let mut revlog = repo.revlog(&path)?;
+        let mut file = File::open(&path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        let record = revlog.add_revision(&buffer)?;
+        manifest.entries.insert(path.into(), record.hash);
+    }
+
+    let record = manifest_revlog.add_revision(&bincode::serialize(&manifest)?)?;
+    changeset.manifest_nodeid = record.hash;
+    changeset.message = message.to_string();
+    changeset.committer = "mingyli34@gmail.com".to_string();
+    changeset.changed_files = vec!["hello.txt".into(), "README.md".into()];
+    use std::time::SystemTime;
+    changeset.time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
+    changelog.add_revision(&bincode::serialize(&changeset)?)?;
     Ok(())
 }
 
