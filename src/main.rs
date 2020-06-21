@@ -14,6 +14,20 @@ fn main() -> Result<()> {
         .author("mingyli")
         .subcommand(clap::SubCommand::with_name("init").about("Initialize a Mercurial repository."))
         .subcommand(
+            clap::SubCommand::with_name("status").about("Display changes to the directory state"),
+        )
+        .subcommand(
+            clap::SubCommand::with_name("add")
+                .about("Add a file to be tracked in the directory state.")
+                .arg(clap::Arg::with_name("file")),
+        )
+        .subcommand(
+            clap::SubCommand::with_name("heads").about("Show open branch heads in the repository."),
+        )
+        .subcommand(
+            clap::SubCommand::with_name("log").about("Display the history of the repository."),
+        )
+        .subcommand(
             clap::SubCommand::with_name("debugindex")
                 .arg(clap::Arg::with_name("file"))
                 .arg(clap::Arg::with_name("changelog").long("changelog"))
@@ -42,6 +56,14 @@ fn main() -> Result<()> {
         .get_matches();
     match matches.subcommand() {
         ("init", Some(_)) => command::init()?,
+        ("status", Some(_)) => command::status()?,
+        ("heads", Some(_)) => command::heads()?,
+        ("log", Some(_)) => command::log()?,
+        ("add", Some(matches)) => command::add(
+            matches
+                .value_of("file")
+                .context("Failed to get file name.")?,
+        )?,
         ("commit", Some(matches)) => command::commit(
             matches
                 .value_of("message")
@@ -80,6 +102,7 @@ fn main() -> Result<()> {
                 )?
             }
         }
+        ("debugdirstate", Some(_matches)) => command::debug_dirstate()?,
         _ => unreachable!(),
     }
     Ok(())

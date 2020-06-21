@@ -1,10 +1,12 @@
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use chrono::Utc;
 
 use crate::changeset::Changeset;
+use crate::dirstate::{Entry, Status};
 use crate::manifest::Manifest;
 use crate::repository::Repository;
 
@@ -12,6 +14,40 @@ use crate::repository::Repository;
 pub fn init() -> Result<()> {
     let repo = Repository::new(".");
     repo.init()?;
+    Ok(())
+}
+
+// TODO: Handle multiple heads after merges are implemented.
+pub fn heads() -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut changelog = repo.changelog_revlog()?;
+    let size = changelog.size()?;
+    let hunk = changelog.get_last_hunk()?;
+    let changeset: Changeset = bincode::deserialize(&hunk)?;
+    println!("{}", size);
+    print!("{}", changeset);
+    Ok(())
+}
+
+pub fn log() -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let mut changelog = repo.changelog_revlog()?;
+    let size = changelog.size()?;
+    for rev in (0..size).rev() {
+        let hunk = changelog.get_hunk(rev)?;
+        let changeset: Changeset = bincode::deserialize(&hunk)?;
+        println!(
+            "changeset: {}:{}",
+            rev,
+            hex::encode(changeset.manifest_nodeid)
+        );
+        println!("user:      {}", changeset.committer);
+        if let Some(time) = changeset.time {
+            println!("date:      {}", time);
+        }
+        println!("summary:   {}", changeset.message);
+        println!();
+    }
     Ok(())
 }
 
@@ -84,22 +120,61 @@ pub fn debug_changelog_data(rev: u32) -> Result<()> {
     Ok(())
 }
 
+pub fn add<P: AsRef<Path>>(path: P) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let repo = Repository::from_cwd()?;
+    let mut dirstate = repo.dirstate()?;
+    let file = OpenOptions::new().read(true).open(&path)?;
+    let metadata = file.metadata()?;
+    let entries = dirstate.mut_entries();
+    entries.entry(path.as_ref().into()).or_insert(Entry {
+        status: Status::Added,
+        mode: metadata.permissions().mode(),
+        size: metadata.len(),
+        mtime: metadata.modified()?,
+    });
+    repo.commit_dirstate(dirstate)?;
+    Ok(())
+}
+
+pub fn status() -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let dirstate = repo.dirstate()?;
+    for (path, entry) in dirstate.entries() {
+        // TODO: Render status nicely.
+        match entry.status {
+            Status::Added | Status::Merged | Status::Removed => {
+                println!("{} {:?}", path.to_str().context("")?, entry);
+            }
+            Status::Normal => {
+                println!("{} {:?}", path.to_str().context("")?, entry);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn commit(message: &str) -> Result<()> {
     let repo = Repository::from_cwd()?;
     let mut changelog = repo.changelog_revlog()?;
-    let mut changeset: Changeset = match changelog.get_last_hunk() {
-        Ok(hunk) => bincode::deserialize(&hunk)?,
-        Err(_) => Changeset::default(),
-    };
+    let mut changeset: Changeset = changelog
+        .get_last_hunk()
+        .and_then(|hunk| bincode::deserialize(&hunk).map_err(anyhow::Error::from))
+        .unwrap_or_default();
 
     let mut manifest_revlog = repo.manifest_revlog()?;
-    let mut manifest: Manifest = match manifest_revlog.get_last_hunk() {
-        Ok(hunk) => bincode::deserialize(&hunk)?,
-        Err(_) => Manifest::default(),
-    };
+    let mut manifest: Manifest = manifest_revlog
+        .get_last_hunk()
+        .and_then(|hunk| bincode::deserialize(&hunk).map_err(anyhow::Error::from))
+        .unwrap_or_default();
 
-    // TODO: Use paths in dirstate?.
-    for path in &["hello.txt", "README.md"] {
+    // Update manifest with committed files.
+    let mut dirstate = repo.dirstate()?;
+    let mut commitable_files = dirstate.committable_files();
+    for (path, _entry) in &commitable_files {
+        // Update revlog of each file.
+        // TODO: Defer writing to revlogs until end, when we actually know the ChangeSetId.
         let mut revlog = repo.revlog(&path)?;
         let mut file = File::open(&path)?;
         let mut buffer = Vec::new();
@@ -108,23 +183,35 @@ pub fn commit(message: &str) -> Result<()> {
         manifest.entries.insert(path.into(), record.hash);
     }
 
+    // Update changelog with newest changeset.
     let record = manifest_revlog.add_revision(&bincode::serialize(&manifest)?)?;
     changeset.manifest_nodeid = record.hash;
     changeset.message = message.to_string();
     changeset.committer = "mingyli34@gmail.com".to_string();
-    changeset.changed_files = vec!["hello.txt".into(), "README.md".into()];
-    use std::time::SystemTime;
-    changeset.time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
-    changelog.add_revision(&bincode::serialize(&changeset)?)?;
+    changeset.changed_files = commitable_files
+        .iter()
+        .map(|(path, _entry)| PathBuf::clone(path))
+        .collect();
+    changeset.time = Some(Utc::now());
+    let record = changelog.add_revision(&bincode::serialize(&changeset)?)?;
+
+    // Update dirstate with newest data.
+    for (path, entry) in &mut commitable_files {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(path)?;
+        entry.status = Status::Normal;
+        entry.size = metadata.len();
+        entry.mode = metadata.permissions().mode();
+    }
+    dirstate.parent1_hash = record.hash;
+    repo.commit_dirstate(dirstate)?;
+
     Ok(())
 }
 
-// Replace contents of file.
-// pub fn checkout(rev: u64) -> Result<()> {
-//     let repo = Repository::from_cwd()?;
-//     let mut revlog = repo.revlog(&path)?;
-//     let hunk = revlog.get_hunk(rev)?;
-//     let mut file = OpenOptions::new().write(true).truncate(true).open(&path)?;
-//     file.write_all(&hunk)?;
-//     Ok(())
-// }
+pub fn debug_dirstate() -> Result<()> {
+    let repo = Repository::from_cwd()?;
+    let dirstate = repo.dirstate()?;
+    dirstate.debug()?;
+    Ok(())
+}

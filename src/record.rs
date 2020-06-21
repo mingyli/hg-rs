@@ -43,10 +43,11 @@ where
     }
 }
 
+// TODO: Implement deltas.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum Hunk {
     Snapshot(Vec<u8>),
-    Delta(Vec<u8>),
+    Delta,
 }
 
 #[cfg(test)]

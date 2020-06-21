@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use crate::dirstate::Dirstate;
 use crate::revlog::RevLog;
 
 #[derive(Debug, PartialEq)]
@@ -33,7 +34,6 @@ impl Repository {
         self.hg_dir.join(path)
     }
 
-    // file_path("hello.txt") -> ~/Documents/hg-rs/hello.txt
     pub fn file_path<P: AsRef<Path>>(&self, path: P) -> PathBuf {
         self.worktree.join(path)
     }
@@ -61,6 +61,14 @@ impl Repository {
             self.hg_dir.join("store").join("00changelog.i"),
             self.hg_dir.join("store").join("00changelog.d"),
         )
+    }
+
+    pub fn dirstate(&self) -> Result<Dirstate> {
+        Dirstate::from_file(self.hg_dir.join("dirstate"))
+    }
+
+    pub fn commit_dirstate(&self, dirstate: Dirstate) -> Result<()> {
+        dirstate.write_to_file(self.hg_dir.join("dirstate"))
     }
 }
 
