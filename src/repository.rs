@@ -12,7 +12,7 @@ pub struct Repository {
     hg_dir: PathBuf,
 }
 
-const REPO_DIR: &str = "hg-rs";
+const REPO_DIR: &str = ".hg-rs";
 
 impl Repository {
     pub fn new<P: AsRef<Path>>(worktree: P) -> Repository {

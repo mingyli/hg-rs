@@ -140,18 +140,42 @@ pub fn add<P: AsRef<Path>>(path: P) -> Result<()> {
 
 pub fn status() -> Result<()> {
     let repo = Repository::from_cwd()?;
-    let dirstate = repo.dirstate()?;
-    for (path, entry) in dirstate.entries() {
-        // TODO: Render status nicely.
-        match entry.status {
-            Status::Added | Status::Merged | Status::Removed => {
-                println!("{} {:?}", path.to_str().context("")?, entry);
+    let mut dirstate = repo.dirstate()?;
+    let entries = dirstate.mut_entries();
+    for dir_entry in std::fs::read_dir(".")?
+        .filter_map(Result::ok)
+        .filter(|dir_entry| {
+            !dir_entry
+                .file_name()
+                .to_str()
+                .map(|s| s.starts_with("."))
+                .unwrap_or(false)
+        })
+    {
+        let path: PathBuf = dir_entry
+            .path()
+            .file_name()
+            .context("Could not get file name.")?
+            .into();
+        let status_symbol = if let Some(entry) = entries.get(&path) {
+            match entry.status {
+                Status::Added => "A",
+                Status::Merged | Status::Removed => unimplemented!(),
+                Status::Normal => {
+                    let metadata = dir_entry.metadata()?;
+                    if entry.mtime == metadata.modified()? && entry.size == metadata.len() {
+                        "C"
+                    } else {
+                        "M"
+                    }
+                }
             }
-            Status::Normal => {
-                println!("{} {:?}", path.to_str().context("")?, entry);
-            }
-        }
+        } else {
+            "?"
+        };
+        println!("{} {}", status_symbol, path.display());
     }
+
     Ok(())
 }
 

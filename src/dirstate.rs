@@ -63,23 +63,18 @@ impl Dirstate {
     pub fn committable_files(&mut self) -> Vec<(&PathBuf, &mut Entry)> {
         self.entries
             .iter_mut()
-            .filter_map(|(path, entry)| {
-                // .filter(|(path, entry)| {
-                // let path = path.clone();
-                match entry.status {
-                    Status::Added | Status::Removed => Some((path, entry)),
-                    Status::Normal => {
-                        let file = OpenOptions::new().read(true).open(&path).ok()?;
-                        let metadata = file.metadata().ok()?;
-                        if metadata.len() != entry.size || metadata.modified().ok()? != entry.mtime
-                        {
-                            Some((path, entry))
-                        } else {
-                            None
-                        }
+            .filter_map(|(path, entry)| match entry.status {
+                Status::Added | Status::Removed => Some((path, entry)),
+                Status::Normal => {
+                    let file = OpenOptions::new().read(true).open(&path).ok()?;
+                    let metadata = file.metadata().ok()?;
+                    if metadata.len() != entry.size || metadata.modified().ok()? != entry.mtime {
+                        Some((path, entry))
+                    } else {
+                        None
                     }
-                    Status::Merged => unimplemented!("Merge is unimplemented."),
                 }
+                Status::Merged => unimplemented!("Merge is unimplemented."),
             })
             .collect()
     }

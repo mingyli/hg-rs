@@ -15,19 +15,6 @@
     - [ ] run from nested directories
 
 ```
-echo thing > hello.txt
-hg status
-hg add hello.txt
-hg status
-hg commit
-hg debugindex hello.txt
-hg debugdata hello.txt 0
-hg summary
-hg log
+~/project
+$ hg-rs init
 ```
-
-hg add
-- adds file to dirstate
-
-hg commit
-- takes dirstate and updates manifest
