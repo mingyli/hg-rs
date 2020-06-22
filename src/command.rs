@@ -226,6 +226,7 @@ pub fn commit(message: &str) -> Result<()> {
         entry.status = Status::Normal;
         entry.size = metadata.len();
         entry.mode = metadata.permissions().mode();
+        entry.mtime = metadata.modified()?;
     }
     dirstate.parent1_hash = record.hash;
     repo.commit_dirstate(dirstate)?;
