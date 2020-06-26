@@ -4,8 +4,9 @@ An implementation of Mercurial in pure Rust.
 
 ## Example 
 
+Add files to be tracked
+
 ```sh
-$ cd project
 $ hg-rs init
 $ echo 'fn main() { println!("Hello!"); }' > hello.rs
 $ hg-rs add hello.rs
@@ -15,7 +16,11 @@ changeset: 0:f987a9e38cfcafa5f3149b94149a00fd9857547a
 user:      mingyli34@gmail.com
 date:      2020-06-22 00:20:57.545640 UTC
 summary:   Add hello.rs
+```
 
+Modify files
+
+```sh
 $ echo 'fn main() { println!("Hello world!"); }' > hello.rs
 $ hg-rs status
 M hello.rs
@@ -30,7 +35,11 @@ changeset: 0:f987a9e38cfcafa5f3149b94149a00fd9857547a
 user:      mingyli34@gmail.com
 date:      2020-06-22 00:20:57.545640 UTC
 summary:   Add hello.rs
+```
 
+Inspect file history
+
+```sh
 $ hg-rs debugdata 0 hello.rs
 fn main() { println!("Hello!"); }
 $ hg-rs debugdata 1 hello.rs
